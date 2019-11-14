@@ -1,0 +1,12 @@
+{
+	"name": "rxjs",
+	"repository": "https://github.com/ReactiveX/rxjs.git",
+	"init": [
+		{ "command": "npm", "args": ["install"] }
+	],
+	"tests": [
+		{
+			"tsconfig": "./tsconfig.json"
+		}
+	]
+}

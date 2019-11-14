@@ -167,10 +167,10 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		},
 		getScriptVersion: (fileName: string): string => {
 			// The files are immutable.
-			return "0";
+			return '0';
 		},
 		// The project is immutable
-		getProjectVersion: () => "0",
+		getProjectVersion: () => '0',
 		getScriptSnapshot: (fileName: string): ts.IScriptSnapshot | undefined => {
 			let result: ts.IScriptSnapshot | undefined = scriptSnapshots.get(fileName);
 			if (result === undefined) {
@@ -199,7 +199,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		fileExists: ts.sys.fileExists,
 		readFile: ts.sys.readFile,
 		readDirectory: ts.sys.readDirectory
-	}
+	};
 	const languageService = ts.createLanguageService(host);
 	const program = languageService.getProgram();
 	if (program === undefined) {
@@ -299,5 +299,8 @@ export async function main(): Promise<void> {
 }
 
 if (require.main === module) {
-	run(ts.sys.args).then(undefined, console.error);
+	run(ts.sys.args).then(undefined, (error) => {
+		console.error(error);
+		process.exitCode = 1;
+	});
 }

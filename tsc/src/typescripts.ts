@@ -25,7 +25,7 @@ export function isNode(value: any): value is ts.Node {
 }
 
 export function getDefaultCompilerOptions(configFileName?: string) {
-	const options: ts.CompilerOptions = configFileName && path.basename(configFileName) === "jsconfig.json"
+	const options: ts.CompilerOptions = configFileName && path.basename(configFileName) === 'jsconfig.json'
 		? { allowJs: true, maxNodeModuleJsDepth: 2, allowSyntheticDefaultImports: true, skipLibCheck: true, noEmit: true }
 		: {};
 	return options;
@@ -114,6 +114,7 @@ export function flattenDiagnosticMessageText(messageText: string | ts.Diagnostic
 
 interface InternalSymbol extends ts.Symbol {
 	parent?: ts.Symbol;
+	containingType?: ts.UnionOrIntersectionType;
 	__symbol__data__key__: string | undefined;
 }
 
@@ -145,7 +146,7 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 	if (result !== undefined) {
 		return result;
 	}
-	let declarations = symbol.getDeclarations()
+	let declarations = symbol.getDeclarations();
 	if (declarations === undefined) {
 		if (typeChecker.isUnknownSymbol(symbol)) {
 			return Unknown;
@@ -161,8 +162,8 @@ export function createSymbolKey(typeChecker: ts.TypeChecker, symbol: ts.Symbol):
 			f: declaration.getSourceFile().fileName,
 			s: declaration.getStart(),
 			e: declaration.getEnd()
-		})
-	};
+		});
+	}
 	let hash = crypto.createHash('md5');
 	hash.update(JSON.stringify(fragments, undefined, 0));
 	result = hash.digest('base64');
@@ -239,6 +240,53 @@ export function isTypeAlias(symbol: ts.Symbol): boolean {
 	return symbol !== undefined && (symbol.getFlags() & ts.SymbolFlags.TypeAlias) !== 0;
 }
 
+export function isComposite(typeChecker: ts.TypeChecker, symbol: ts.Symbol, location?: ts.Node): boolean {
+	const containingType = (symbol as InternalSymbol).containingType;
+	if (containingType !== undefined && containingType.isUnionOrIntersection()) {
+		return true;
+	}
+
+	if (location !== undefined) {
+		const type = typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		if (type.isUnionOrIntersection()) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+export function getCompositeSymbols(typeChecker: ts.TypeChecker, symbol: ts.Symbol, location?: ts.Node): ts.Symbol[] | undefined {
+	// We have something like x: { prop: number} | { prop: string };
+	const containingType = (symbol as InternalSymbol).containingType;
+	if (containingType !== undefined) {
+		let result: ts.Symbol[] = [];
+		for (let typeElem of containingType.types) {
+			const symbolElem = typeElem.getProperty(symbol.getName());
+			if (symbolElem !== undefined) {
+				result.push(symbolElem);
+			}
+		}
+		return result.length > 0 ? result : undefined;
+	}
+	if (location !== undefined) {
+		const type = typeChecker.getTypeOfSymbolAtLocation(symbol, location);
+		// we have something like x: A | B;
+		if (type.isUnionOrIntersection()) {
+			let result: ts.Symbol[] = [];
+			for (let typeElem of type.types) {
+				const symbolElem = typeElem.symbol;
+				// This happens for base types like undefined, number, ....
+				if (symbolElem !== undefined) {
+					result.push(symbolElem);
+				}
+			}
+			return result;
+		}
+	}
+	return undefined;
+}
+
 export function isPrivate(symbol: ts.Symbol): boolean {
 	let declarations = symbol.getDeclarations();
 	if (declarations) {
@@ -306,7 +354,7 @@ function doComputeMoniker(node: ts.Node): string | undefined {
 			// We have an anonymous function declaration => no key.
 			return undefined;
 		}
-	} while ((node = node.parent) !== undefined && !ts.isSourceFile(node))
+	} while ((node = node.parent) !== undefined && !ts.isSourceFile(node));
 	return buffer.join('.');
 }
 

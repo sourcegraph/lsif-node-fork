@@ -12,8 +12,7 @@ import * as uuid from 'uuid';
 import PackageJson from './package';
 import {
 	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, nextMoniker
-}
-from 'lsif-protocol';
+} from 'lsif-protocol';
 
 import * as Is from 'lsif-tsc/lib/utils/is';
 import { TscMoniker, NpmMoniker } from 'lsif-tsc/lib/utils/moniker';
@@ -132,7 +131,7 @@ class Linker {
 			name: packageJson.name,
 			manager: 'npm',
 			version: packageJson.version
-		}
+		};
 		if (packageJson.hasRepository()) {
 			result.repository = packageJson.repository;
 		}
@@ -242,8 +241,9 @@ class ImportLinker extends Linker {
 			let part = parts[i];
 			if (part === 'node_modules') {
 				// End is exclusive and one for the name
-				packagePath = path.join(this.projectRoot, ...parts.slice(0, i + 2), `package.json`);
-				monikerPath = parts.slice(i + 2).join('/');
+				const packageIndex = i + (parts[i + 1].startsWith('@') ? 3 : 2);
+				packagePath = path.join(this.projectRoot, ...parts.slice(0, packageIndex), `package.json`);
+				monikerPath = parts.slice(packageIndex).join('/');
 				break;
 			}
 		}
@@ -327,13 +327,13 @@ export function main(): void {
 
 	let packageFile: string | undefined = options.package;
 	if (packageFile === undefined) {
-		packageFile = 'package.json'
+		packageFile = 'package.json';
 	}
 	packageFile = makeAbsolute(packageFile);
 	const packageJson: PackageJson | undefined = PackageJson.read(packageFile);
 	let projectRoot = options.projectRoot;
 	if (projectRoot === undefined && packageFile !== undefined) {
-		projectRoot = path.posix.dirname(packageFile)
+		projectRoot = path.posix.dirname(packageFile);
 		if (!path.isAbsolute(projectRoot)) {
 			projectRoot = makeAbsolute(projectRoot);
 		}

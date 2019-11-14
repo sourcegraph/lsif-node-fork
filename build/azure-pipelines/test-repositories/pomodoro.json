@@ -1,0 +1,12 @@
+{
+	"name": "pomodoro",
+	"repository": "https://github.com/vsls-contrib/pomodoro.git",
+	"init": [
+		{ "command": "npm", "args": ["install"] }
+	],
+	"tests": [
+		{
+			"tsconfig": "./tsconfig.json"
+		}
+	]
+}

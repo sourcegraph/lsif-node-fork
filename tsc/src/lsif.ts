@@ -22,6 +22,10 @@ import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 import { Emitter } from './emitters/emitter';
 import { LRUCache } from './utils/linkedMap';
 
+interface Disposable {
+	(): void;
+}
+
 namespace Converter {
 
 	const DiagnosticCategory = ts.DiagnosticCategory;
@@ -71,7 +75,7 @@ namespace Converter {
 		return {
 			start: { line: start.line, character: start.character },
 			end: { line: end.line, character: end.character }
-		}
+		};
 	}
 
 	export function rangeFromTextSpan(this: void, file: ts.SourceFile, textSpan: ts.TextSpan): lsp.Range {
@@ -701,8 +705,9 @@ class SymbolDataPartition extends LSIFData {
 		}
 		for (let definitionRange of this.definitionRanges) {
 			if (definitionRange.start.line === range.start.line && definitionRange.start.character === range.start.character &&
-				definitionRange.end.line === range.end.line && definitionRange.end.character === range.end.character) {
-					return definitionRange;
+				definitionRange.end.line === range.end.line && definitionRange.end.character === range.end.character)
+			{
+				return definitionRange;
 			}
 		}
 		return undefined;
@@ -749,7 +754,7 @@ class SymbolDataPartition extends LSIFData {
 			let referenceResult = this.symbolData.getOrCreateReferenceResult();
 			for (let property of this.referenceRanges.keys()) {
 				let values = this.referenceRanges.get(property)!;
-				this.emit(this.edge.item(referenceResult, values, this.document, property))
+				this.emit(this.edge.item(referenceResult, values, this.document, property));
 			}
 		}
 		if (this.referenceResults !== SymbolDataPartition.EMPTY_ARRAY) {
@@ -781,6 +786,8 @@ class Symbols {
 	private baseMemberCache: LRUCache<string, LRUCache<string, ts.Symbol[]>>;
 	private exportedPaths: LRUCache<ts.Symbol, string | null>;
 	private symbolAliases: Map<string, SymbolAlias>;
+	private parents: Map<string, ts.Symbol>;
+	private exports: Map<string, Set<string>>;
 	private sourceFilesContainingAmbientDeclarations: Set<string>;
 
 	constructor(private program: ts.Program, private typeChecker: ts.TypeChecker) {
@@ -788,6 +795,8 @@ class Symbols {
 		this.baseMemberCache = new LRUCache(2048);
 		this.exportedPaths = new LRUCache(2048);
 		this.symbolAliases = new Map();
+		this.parents = new Map();
+		this.exports = new Map();
 		this.sourceFilesContainingAmbientDeclarations = new Set();
 
 		const ambientModules = this.typeChecker.getAmbientModules();
@@ -815,6 +824,51 @@ class Symbols {
 	public deleteSymbolAlias(symbol: ts.Symbol): void {
 		const key = tss.createSymbolKey(this.typeChecker, symbol);
 		this.symbolAliases.delete(key);
+	}
+
+	public addParent(symbol: ts.Symbol, parent: ts.Symbol): Disposable {
+		const key = tss.createSymbolKey(this.typeChecker, symbol);
+		this.parents.set(key, parent);
+		return () => {
+			this.parents.delete(key);
+		};
+	}
+
+	private getParent(symbol: ts.Symbol): ts.Symbol | undefined {
+		let result = tss.getSymbolParent(symbol);
+		if (result !== undefined) {
+			return result;
+		}
+		return this.parents.get(tss.createSymbolKey(this.typeChecker, symbol));
+	}
+
+	public addExport(parent: ts.Symbol, symbol: ts.Symbol): Disposable {
+		const parentKey = tss.createSymbolKey(this.typeChecker, parent);
+		const symbolKey = tss.createSymbolKey(this.typeChecker, symbol);
+		let values = this.exports.get(parentKey);
+		if (values === undefined) {
+			values = new Set();
+			this.exports.set(parentKey, values);
+		}
+		values.add(symbolKey);
+		return () => {
+			let values = this.exports.get(parentKey);
+			if (values === undefined) {
+				return;
+			}
+			values.delete(symbolKey);
+			if (values.size === 0) {
+				this.exports.delete(parentKey);
+			}
+		};
+	}
+
+	private isExported(parent: ts.Symbol, symbol: ts.Symbol): boolean {
+		if (parent.exports !== undefined && parent.exports.has(symbol.getName() as ts.__String)) {
+			return true;
+		}
+		let exports = this.exports.get(tss.createSymbolKey(this.typeChecker, parent));
+		return exports !== undefined && exports.has(tss.createSymbolKey(this.typeChecker, symbol));
 	}
 
 	public getBaseSymbols(symbol: ts.Symbol): ts.Symbol[] | undefined {
@@ -936,7 +990,7 @@ class Symbols {
 			this.exportedPaths.set(symbol, '');
 			return '';
 		}
-		let parent = tss.getSymbolParent(symbol);
+		let parent = this.getParent(symbol);
 		if (parent === undefined) {
 			if (tss.isValueModule(symbol) || kind === LocationKind.tsLibrary || kind === LocationKind.global) {
 				this.exportedPaths.set(symbol, symbol.getName());
@@ -960,21 +1014,17 @@ class Symbols {
 					result = `${parentValue}.${symbol.getName()}`;
 					this.exportedPaths.set(symbol, result);
 					return result;
-				} else if (parent.exports !== undefined) {
-					if (parent.exports.has(symbol.getName() as ts.__String)) {
-						result = parentValue.length > 0 ? `${parentValue}.${symbol.getName()}` : symbol.getName();
-						this.exportedPaths.set(symbol, result);
-						return result;
-					} else {
-						this.exportedPaths.set(symbol, null);
-						return undefined;
-					}
+				} else if (this.isExported(parent, symbol)) {
+					result = parentValue.length > 0 ? `${parentValue}.${symbol.getName()}` : symbol.getName();
+					this.exportedPaths.set(symbol, result);
+					return result;
 				} else {
 					this.exportedPaths.set(symbol, null);
 					return undefined;
 				}
 			}
 		}
+
 	}
 
 	public getLocationKind(sourceFiles: ts.SourceFile[]): LocationKind | undefined {
@@ -1051,6 +1101,17 @@ abstract class SymbolDataResolver {
 			throw new Error(`No soure file selection provided`);
 		}
 		return sourceFiles[0];
+	}
+
+	public getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
+		if (tss.isNamedDeclaration(declaration)) {
+			let name = declaration.name;
+			return [name, name.getText()];
+		}
+		if (tss.isValueModule(symbol) && ts.isSourceFile(declaration)) {
+			return [declaration, ''];
+		}
+		return [undefined, undefined];
 	}
 
 	public abstract resolve(sourceFile: ts.SourceFile | undefined, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData;
@@ -1143,26 +1204,22 @@ class UnionOrIntersectionResolver extends SymbolDataResolver {
 	}
 
 	public resolve(sourceFile: ts.SourceFile, id: SymbolId, symbol: ts.Symbol, location?: ts.Node, scope?: ts.Node): SymbolData {
-		if (location === undefined) {
-			throw new Error(`Union or intersection resolver requires a location`);
-		}
-		let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-		if (!type.isUnionOrIntersection()) {
-			throw new Error(`Type is not a union or intersection type`);
-		}
-		if (type.types.length > 0) {
-			let datas: SymbolData[] = [];
-			for (let typeElem of type.types) {
-				let symbol = typeElem.symbol;
-				// This happens for base types like undefined, number, ....
-				if (symbol !== undefined) {
-					datas.push(this.resolverContext.getOrCreateSymbolData(symbol));
-				}
+		const composites = tss.getCompositeSymbols(this.typeChecker, symbol, location);
+		if (composites !== undefined) {
+			const datas: SymbolData[] = [];
+			for (let symbol of composites) {
+				datas.push(this.resolverContext.getOrCreateSymbolData(symbol));
 			}
 			return new UnionOrIntersectionSymbolData(this.symbolDataContext, id, sourceFile, datas);
 		} else {
 			return new StandardSymbolData(this.symbolDataContext, id, undefined);
 		}
+		// We have something like x: { prop: number} | { prop: string };
+		throw new Error(`Union or intersection resolver requires a location`);
+	}
+
+	public getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
+		return [declaration, declaration.getText()];
 	}
 }
 
@@ -1307,7 +1364,7 @@ export class DataManager implements SymbolDataContext {
 		}
 		this.projectData.end();
 		if (!this.options.stdout) {
-			console.log('')
+			console.log('');
 			console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
 		}
 	}
@@ -1442,6 +1499,7 @@ class Visitor implements ResolverContext {
 	private currentSourceFile: ts.SourceFile | undefined;
 	private _currentDocumentData: DocumentData | undefined;
 	private symbols: Symbols;
+	private disposables: Map<string, Disposable[]>;
 	private symbolContainer: RangeBasedDocumentSymbol[];
 	private recordDocumentSymbol: boolean[];
 	private dataManager: DataManager;
@@ -1455,7 +1513,7 @@ class Visitor implements ResolverContext {
 	};
 
 	constructor(private languageService: ts.LanguageService, private options: Options, dependsOn: ProjectInfo[], private emitter: Emitter, idGenerator: () => Id, tsConfigFile: string | undefined) {
-		this.program = languageService.getProgram()!
+		this.program = languageService.getProgram()!;
 		this.typeChecker = this.program.getTypeChecker();
 		this.builder = new Builder({
 			idGenerator,
@@ -1469,7 +1527,7 @@ class Visitor implements ResolverContext {
 		}
 		this.dependentOutDirs.sort((a, b) => {
 			return b.length - a.length;
-		})
+		});
 		this.projectRoot = options.projectRoot;
 		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true)));
 		this.project = this.vertex.project();
@@ -1489,6 +1547,7 @@ class Visitor implements ResolverContext {
 		}
 		this.dataManager = new DataManager(this, this.project, options);
 		this.symbols = new Symbols(this.program, this.typeChecker);
+		this.disposables = new Map();
 		this.symbolDataResolvers = {
 			standard: new StandardResolver(this.typeChecker, this.symbols, this, this.dataManager),
 			alias: new AliasResolver(this.typeChecker, this.symbols, this, this.dataManager),
@@ -1496,7 +1555,7 @@ class Visitor implements ResolverContext {
 			unionOrIntersection: new UnionOrIntersectionResolver(this.typeChecker, this.symbols, this, this.dataManager),
 			transient: new TransientResolver(this.typeChecker, this.symbols, this, this.dataManager),
 			typeAlias: new TypeAliasResolver(this.typeChecker, this.symbols, this, this.dataManager)
-		}
+		};
 	}
 
 	public visitProgram(): ProjectInfo {
@@ -1575,6 +1634,7 @@ class Visitor implements ResolverContext {
 	}
 
 	private visitSourceFile(sourceFile: ts.SourceFile): boolean {
+		let disposables: Disposable[] = [];
 		if (this.isFullContentIgnored(sourceFile)) {
 			return false;
 		}
@@ -1582,10 +1642,43 @@ class Visitor implements ResolverContext {
 			process.stdout.write('.');
 		}
 
+		// things we need to capture to have correct exports
+		// `export =` or an `export default` declaration ==> ExportAssignment
+		// `exports.bar = function foo() { ... }` ==> ExpressionStatement
+		// `export { root }` ==> ExportDeclaration
+		// `export { _root as root }` ==> ExportDeclaration
+		const processSymbol = (disposables: Disposable[], parent: ts.Symbol, symbol: ts.Symbol): void => {
+			if (tss.getSymbolParent(symbol) === undefined) {
+				disposables.push(this.symbols.addParent(symbol, parent));
+			}
+			if (parent.exports === undefined || !parent.exports.has(symbol.getName() as ts.__String)) {
+				disposables.push(this.symbols.addExport(parent, symbol));
+			}
+		};
 		const exportAssignments: ts.ExportAssignment[] = [];
+		const sourceFileSymbol = this.typeChecker.getSymbolAtLocation(sourceFile);
 		for (let node of sourceFile.statements) {
 			if (ts.isExportAssignment(node)) {
 				exportAssignments.push(node);
+			} else if (ts.isExportDeclaration(node) && sourceFileSymbol !== undefined) {
+				if (node.exportClause !== undefined) {
+					for (let element of node.exportClause.elements) {
+						let exportSymbol = this.typeChecker.getSymbolAtLocation(element.name);
+						if (exportSymbol === undefined) {
+							continue;
+						}
+						processSymbol(disposables, sourceFileSymbol, exportSymbol);
+						let localSymbol: ts.Symbol | undefined;
+						if (element.propertyName !== undefined) {
+							localSymbol = this.typeChecker.getSymbolAtLocation(element.propertyName);
+						} else if (tss.isAliasSymbol(exportSymbol)) {
+							localSymbol = this.typeChecker.getAliasedSymbol(exportSymbol);
+						}
+						if (localSymbol !== undefined) {
+							processSymbol(disposables, sourceFileSymbol, localSymbol);
+						}
+					}
+				}
 			}
 		}
 		if (exportAssignments.length > 0) {
@@ -1597,7 +1690,7 @@ class Visitor implements ResolverContext {
 		this._currentDocumentData = documentData;
 		this.symbolContainer.push({ id: documentData.document.id, children: [] });
 		this.recordDocumentSymbol.push(true);
-
+		this.disposables.set(sourceFile.fileName, disposables);
 		return true;
 	}
 
@@ -1645,6 +1738,10 @@ class Visitor implements ResolverContext {
 		this.currentSourceFile = undefined;
 		this._currentDocumentData = undefined;
 		this.dataManager.documemntProcessed(sourceFile.fileName);
+		for (let disposable of this.disposables.get(sourceFile.fileName)!) {
+			disposable();
+		}
+		this.disposables.delete(sourceFile.fileName);
 		if (this.symbolContainer.length !== 0) {
 			throw new Error(`Unbalanced begin / end calls`);
 		}
@@ -1775,7 +1872,6 @@ class Visitor implements ResolverContext {
 		return true;
 	}
 
-
 	private handleExportAssignments(nodes: ts.ExportAssignment[]): void {
 		let index = 0;
 		for (let node of nodes) {
@@ -1872,14 +1968,14 @@ class Visitor implements ResolverContext {
 				}
 			}
 			return undefined;
-		}
+		};
 
 		let result = this.dataManager.getDocumentData(sourceFile.fileName);
 		if (result !== undefined) {
 			return result;
 		}
 
-		let document = this.vertex.document(sourceFile.fileName, sourceFile.text)
+		let document = this.vertex.document(sourceFile.fileName, sourceFile.text);
 
 		let monikerPath: string | undefined;
 		let library: boolean = false;
@@ -1962,7 +2058,7 @@ class Visitor implements ResolverContext {
 		let hover: lsp.Hover | undefined;
 		for (let declaration of declarations) {
 			const sourceFile = declaration.getSourceFile();
-			const [identifierNode, identifierText] = this.getIdentifierInformation(sourceFile, symbol, declaration);
+			const [identifierNode, identifierText] = resolver.getIdentifierInformation(sourceFile, symbol, declaration);
 			if (identifierNode !== undefined && identifierText !== undefined) {
 				const documentData = this.getOrCreateDocumentData(sourceFile);
 				const range = ts.isSourceFile(declaration) ? { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } : Converter.rangeFromNode(sourceFile, identifierNode);
@@ -2011,17 +2107,6 @@ class Visitor implements ResolverContext {
 		return result;
 	}
 
-	private getIdentifierInformation(sourceFile: ts.SourceFile, symbol: ts.Symbol, declaration: ts.Node): [ts.Node, string] | [undefined, undefined] {
-		if (tss.isNamedDeclaration(declaration)) {
-			let name = declaration.name;
-			return [name, name.getText()];
-		}
-		if (tss.isValueModule(symbol) && ts.isSourceFile(declaration)) {
-			return [declaration, ''];
-		}
-		return [undefined, undefined];
-	}
-
 	private resolveEmittingNode(symbol: ts.Symbol, isExported: boolean): ts.Node | undefined {
 		// The symbol has a export path so we can't bind this to a node
 		// Note that we even treat private class members like this. Reason being
@@ -2057,11 +2142,16 @@ class Visitor implements ResolverContext {
 
 	private getResolver(symbol: ts.Symbol, location?: ts.Node): SymbolDataResolver {
 		if (location !== undefined && tss.isTransient(symbol)) {
-			let type = this.typeChecker.getTypeOfSymbolAtLocation(symbol, location);
-			if (type.isUnionOrIntersection()) {
+			if (tss.isComposite(this.typeChecker, symbol, location)) {
 				return this.symbolDataResolvers.unionOrIntersection;
 			} else {
-				return this.symbolDataResolvers.transient;
+				// Problem: Symbols that come from the lib*.d.ts files are marked transient
+				// as well. Check if the symbol has some other meaningful flags
+				if ((symbol.getFlags() & ~ts.SymbolFlags.Transient) !== 0) {
+					return this.symbolDataResolvers.standard;
+				} else {
+					return this.symbolDataResolvers.transient;
+				}
 			}
 		}
 		if (tss.isTypeAlias(symbol)) {
