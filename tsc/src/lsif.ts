@@ -1392,7 +1392,7 @@ export class DataManager implements SymbolDataContext {
 		return result;
 	}
 
-	public documemntProcessed(fileName: string, close: boolean): void {
+	public documentProcessed(fileName: string, close: boolean): void {
 		let data = this.getDocumentData(fileName);
 		if (data === undefined) {
 			throw new Error(`No document data for file ${fileName}`);
@@ -1768,7 +1768,7 @@ class Visitor implements ResolverContext {
 		// Instead of the previous behavior, we'll rely on the projectProcessed function 
 		// to close all open symbols and documents and emit whatever elements are still 
 		// in the buffer once the project is finished being indexed.
-		this.dataManager.documemntProcessed(sourceFile.fileName, false);
+		this.dataManager.documentProcessed(sourceFile.fileName, false);
 
 		for (let disposable of this.disposables.get(sourceFile.fileName)!) {
 			disposable();
