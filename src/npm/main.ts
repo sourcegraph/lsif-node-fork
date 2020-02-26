@@ -14,9 +14,10 @@ import {
 	Edge, Vertex, Id, Moniker, PackageInformation, packageInformation, EdgeLabels, ElementTypes, VertexLabels, MonikerKind, nextMoniker
 } from 'lsif-protocol';
 
-import * as Is from '../../shared/is';
-import { TscMoniker, NpmMoniker } from '../../shared/moniker';
-import { StdoutWriter, FileWriter, Writer } from '../../shared/writer';
+import * as Is from '../shared/is';
+import { TscMoniker, NpmMoniker } from '../shared/moniker';
+import { StdoutWriter, FileWriter, Writer } from '../shared/writer';
+import { toolVersion } from '../shared/consts';
 
 
 interface Options {
@@ -299,14 +300,14 @@ export function main(): void {
 	const options: Options = Object.assign(Options.defaults, minimist(process.argv.slice(2), minOpts));
 
 	if (options.version) {
-		console.log(require('../package.json').version);
+		console.log(toolVersion);
 		return;
 	}
 
 	let buffer: string[] = [];
 	if (options.help) {
 		buffer.push(`Languag Server Index Format tool for NPM`);
-		buffer.push(`Version: ${require('../package.json').version}`);
+		buffer.push(`Version: ${toolVersion}`);
 		buffer.push('');
 		buffer.push(`Usage: lsif-npm [options]`);
 		buffer.push('');
@@ -396,6 +397,4 @@ export function main(): void {
 	});
 }
 
-if (require.main === module) {
-	main();
-}
+main();

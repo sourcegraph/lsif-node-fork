@@ -6,6 +6,7 @@
 import { promisify } from 'util';
 import * as path from 'path';
 import * as _fs from 'fs';
+import { load, commands } from 'npm'
 
 namespace fs {
 	export const exist = promisify(_fs.exists);
@@ -210,9 +211,9 @@ export class TypingsInstaller {
 
 	private async loadNpm(packageFile: string): Promise<void> {
 		const prefix = path.dirname(packageFile);
-		let npm = await import('npm');
+		// let npm = await import('npm');
 		await new Promise((resolve, reject) => {
-			npm.load({ json: true, save: false, 'save-dev': false, prefix: prefix }, (error, config) => {
+			/* npm. */load({ json: true, save: false, 'save-dev': false, prefix: prefix }, (error, config) => {
 				if (error) {
 					reject(error);
 				} else {
@@ -227,11 +228,11 @@ export class TypingsInstaller {
 			return typings;
 		}
 		const promises: Promise<string | undefined>[] = [];
-		let npm = await import('npm');
+		// let npm = await import('npm');
 		for (let typing of typings) {
 			try {
 				promises.push(new Promise<string | undefined>((resolve, reject) => {
-					(npm.commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, result: object) => {
+					(/* npm. */commands.view as ViewSignature)([typing], true, (error: Error | undefined | null, result: object) => {
 						if (error) {
 							resolve(undefined);
 						}
@@ -256,9 +257,9 @@ export class TypingsInstaller {
 		if (typings.length === 0) {
 			return;
 		}
-		let npm = await import('npm');
+		// let npm = await import('npm');
 		return new Promise((resolve, reject) => {
-			npm.commands.install(typings, (error, result) => {
+			/* npm. */commands.install(typings, (error, result) => {
 				if (error) {
 					reject(error);
 				}

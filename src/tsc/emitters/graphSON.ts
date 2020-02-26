@@ -4,7 +4,7 @@
  * ------------------------------------------------------------------------------------------ */
 import { Emitter, Create } from './emitter';
 import { Vertex, Edge, Id, EdgeLabels, ElementTypes } from 'lsif-protocol';
-import { Writer } from '../../../shared/writer';
+import { Writer } from '../../shared/writer';
 
 interface GraphSonProperty {
 	id: Id;

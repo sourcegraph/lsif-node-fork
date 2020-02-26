@@ -12,11 +12,11 @@ import * as ts from 'typescript-lsif';
 import * as tss from './typescripts';
 
 import { Id } from 'lsif-protocol';
-import { toolVersion } from './consts';
+import { toolVersion } from '../shared/consts';
 import { Emitter, EmitterModule } from './emitters/emitter';
 import { TypingsInstaller } from './typings';
 import { lsif, ProjectInfo, Options as VisitorOptions } from './lsif';
-import { Writer, StdoutWriter, FileWriter } from '../../shared/writer';
+import { Writer, StdoutWriter, FileWriter } from '../shared/writer';
 
 interface Options {
 	help: boolean;
@@ -299,9 +299,7 @@ export async function main(): Promise<void> {
 	return run(ts.sys.args);
 }
 
-if (require.main === module) {
-	run(ts.sys.args).then(undefined, (error) => {
-		console.error(error);
-		process.exitCode = 1;
-	});
-}
+run(ts.sys.args).then(undefined, (error) => {
+	console.error(error);
+	process.exitCode = 1;
+});

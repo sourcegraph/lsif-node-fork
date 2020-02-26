@@ -15,11 +15,11 @@ import {
 	Version, Range, EventKind, TypeDefinitionResult
 } from 'lsif-protocol';
 
-import { toolVersion } from './consts';
+import { toolVersion } from '../shared/consts';
 import { VertexBuilder, EdgeBuilder, Builder } from './graph';
 import { Emitter } from './emitters/emitter';
 import * as tss from './typescripts';
-import { LRUCache } from '../../shared/linkedMap';
+import { LRUCache } from '../shared/linkedMap';
 
 interface Disposable {
 	(): void;
