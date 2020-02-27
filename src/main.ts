@@ -24,8 +24,7 @@ import { execSync } from 'child_process';
 interface Options {
 	help: boolean;
 	version: boolean;
-	projectRoot: string | undefined;
-	repositoryRoot: string | undefined;
+	repositoryRoot: string;
 	addContents: boolean;
 	inferTypings: boolean;
 	out: string;
@@ -44,8 +43,7 @@ namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		projectRoot: undefined,
-		repositoryRoot: undefined,
+		repositoryRoot: '',
 		addContents: false,
 		inferTypings: false,
 		out: 'dump.lsif',
@@ -53,8 +51,7 @@ namespace Options {
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
-		{ id: 'repositoryRoot', type: 'string', default: undefined, description: 'Specifies the repository root.'},
+		{ id: 'repositoryRoot', type: 'string', default: '', description: 'Specifies the repository root.'},
 		{ id: 'addContents', type: 'boolean', default: false, description: 'File contents will be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
 		{ id: 'out', type: 'string', default: 'dump.lsif', description: 'The output file the dump is save to.'},
@@ -86,7 +83,7 @@ function createIdGenerator(options: Options): () => Id {
 	};
 }
 
-async function processProject(config: ts.ParsedCommandLine, options: Options, emitter: Emitter, idGenerator: () => Id, importLinker: ImportLinker, exportLinker: ExportLinker | undefined, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
+async function processProject(config: ts.ParsedCommandLine, options: Options, projectRoot: string, emitter: Emitter, idGenerator: () => Id, importLinker: ImportLinker, exportLinker: ExportLinker | undefined, typingsInstaller: TypingsInstaller): Promise<ProjectInfo | undefined> {
 	let tsconfigFileName: string | undefined;
 	if (config.options.project) {
 		const projectPath = path.resolve(config.options.project);
@@ -109,22 +106,12 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		return undefined;
 	}
 
-	if (options.projectRoot === undefined) {
-		options.projectRoot = process.cwd();
-	}
-	options.projectRoot = tss.makeAbsolute(options.projectRoot);
-
-	if (options.repositoryRoot === undefined) {
-		options.repositoryRoot = execSync('git rev-parse --show-toplevel').toString().trimRight()
-	}
-	options.repositoryRoot = tss.makeAbsolute(options.repositoryRoot);
-
 	if (options.inferTypings) {
 		if (config.options.types !== undefined) {
 			const start = tsconfigFileName !== undefined ? tsconfigFileName : process.cwd();
-			await typingsInstaller.installTypings(options.projectRoot, start, config.options.types);
+			await typingsInstaller.installTypings(projectRoot, start, config.options.types);
 		} else {
-			await typingsInstaller.guessTypings(options.projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
+			await typingsInstaller.guessTypings(projectRoot, tsconfigFileName !== undefined ? path.dirname(tsconfigFileName) : process.cwd());
 		}
 	}
 
@@ -187,7 +174,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	if (references) {
 		for (let reference of references) {
 			if (reference) {
-				const projectInfo = await processProject(reference.commandLine, options, emitter, idGenerator, importLinker, exportLinker, typingsInstaller);
+				const projectInfo = await processProject(reference.commandLine, options, projectRoot, emitter, idGenerator, importLinker, exportLinker, typingsInstaller);
 				if (projectInfo !== undefined) {
 					dependsOn.push(projectInfo);
 				}
@@ -196,7 +183,7 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 	}
 
 	program.getTypeChecker();
-	return lsif(languageService, options as VisitorOptions, dependsOn, emitter, idGenerator, importLinker, exportLinker, tsconfigFileName);
+	return lsif(languageService, ({ ...options, projectRoot }) as VisitorOptions, dependsOn, emitter, idGenerator, importLinker, exportLinker, tsconfigFileName);
 }
 
 async function run(this: void, args: string[]): Promise<void> {
@@ -248,17 +235,12 @@ async function run(this: void, args: string[]): Promise<void> {
 	packageFile = tss.makeAbsolute(packageFile);
 	const packageJson: PackageJson | undefined = PackageJson.read(packageFile);
 
-	let projectRoot = options.projectRoot;
-	if (projectRoot === undefined && packageFile !== undefined) {
-		projectRoot = path.posix.dirname(packageFile);
-		if (!path.isAbsolute(projectRoot)) {
-			projectRoot = tss.makeAbsolute(projectRoot);
-		}
+	const projectRoot = tss.makeAbsolute(path.posix.dirname(packageFile));
+
+	if (options.repositoryRoot === '') {
+		options.repositoryRoot = execSync('git rev-parse --show-toplevel').toString().trimRight()
 	}
-	if (projectRoot === undefined) {
-		process.exitCode = -1;
-		return;
-	}
+	options.repositoryRoot = tss.makeAbsolute(options.repositoryRoot);
 
 	let writer = new FileWriter(fs.openSync(options.out, 'w'));
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
@@ -269,7 +251,7 @@ async function run(this: void, args: string[]): Promise<void> {
 	if (packageJson !== undefined) {
 		exportLinker = new ExportLinker(projectRoot, packageJson, emitter, idGenerator);
 	}
-	await processProject(config, options, emitter, idGenerator, importLinker, exportLinker, new TypingsInstaller());
+	await processProject(config, options, projectRoot, emitter, idGenerator, importLinker, exportLinker, new TypingsInstaller());
 }
 
 export async function main(): Promise<void> {
