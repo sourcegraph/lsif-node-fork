@@ -24,7 +24,6 @@ import { execSync } from 'child_process';
 interface Options {
 	help: boolean;
 	version: boolean;
-	package?: string;
 	projectRoot: string | undefined;
 	repositoryRoot: string | undefined;
 	addContents: boolean;
@@ -45,7 +44,6 @@ namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
-		package: undefined,
 		projectRoot: undefined,
 		repositoryRoot: undefined,
 		addContents: false,
@@ -55,7 +53,6 @@ namespace Options {
 	export const descriptions: OptionDescription[] = [
 		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
 		{ id: 'repositoryRoot', type: 'string', default: undefined, description: 'Specifies the repository root.'},
 		{ id: 'addContents', type: 'boolean', default: false, description: 'File contents will be embedded into the dump.'},
@@ -247,12 +244,10 @@ async function run(this: void, args: string[]): Promise<void> {
 		return;
 	}
 
-	let packageFile: string | undefined = options.package;
-	if (packageFile === undefined) {
-		packageFile = 'package.json';
-	}
+	let packageFile = 'package.json';
 	packageFile = tss.makeAbsolute(packageFile);
 	const packageJson: PackageJson | undefined = PackageJson.read(packageFile);
+
 	let projectRoot = options.projectRoot;
 	if (projectRoot === undefined && packageFile !== undefined) {
 		projectRoot = path.posix.dirname(packageFile);
