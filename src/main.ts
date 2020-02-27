@@ -76,7 +76,7 @@ function loadConfigFile(file: string): ts.ParsedCommandLine {
 	return result;
 }
 
-function createIdGenerator(options: Options): () => Id {
+function createIdGenerator(): () => Id {
 	let counter = 1;
 	return () => {
 		return counter++;
@@ -244,7 +244,7 @@ async function run(this: void, args: string[]): Promise<void> {
 
 	let writer = new FileWriter(fs.openSync(options.out, 'w'));
 	const config: ts.ParsedCommandLine = ts.parseCommandLine(args);
-	const idGenerator = createIdGenerator(options);
+	const idGenerator = createIdGenerator();
 	const emitter = createEmitter(writer);
 	const importLinker: ImportLinker = new ImportLinker(projectRoot, emitter, idGenerator);
 	let exportLinker: ExportLinker | undefined;
