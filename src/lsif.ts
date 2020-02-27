@@ -1326,6 +1326,7 @@ export class DataManager implements SymbolDataContext {
 	private documentDatas: Map<string, DocumentData | null>;
 	private symbolStats: number;
 	private symbolDatas: Map<string, SymbolData | null>;
+	private started: Date;
 	private clearOnNode: Map<ts.Node, SymbolData[]>;
 
 	public constructor(private context: EmitContext, project: Project) {
@@ -1333,6 +1334,7 @@ export class DataManager implements SymbolDataContext {
 		this.projectData.begin();
 		this.documentStats = 0;
 		this.symbolStats = 0;
+		this.started = new Date();
 		this.documentDatas = new Map();
 		this.symbolDatas = new Map();
 		this.clearOnNode = new Map();
@@ -1368,7 +1370,10 @@ export class DataManager implements SymbolDataContext {
 		}
 		this.projectData.end();
 		console.log('');
-		console.log(`Processed ${this.symbolStats} symbols in ${this.documentStats} files`);
+
+		let elapsed = new Date().getTime() - this.started.getTime();
+		console.log(`${this.documentStats} file(s), ${this.symbolStats} symbol(s)`)
+		console.log(`Processed in ${elapsed / 1000}s`)
 	}
 
 	public getDocumentData(fileName: string): DocumentData | undefined {

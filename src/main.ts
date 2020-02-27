@@ -43,18 +43,18 @@ namespace Options {
 	export const defaults: Options = {
 		help: false,
 		version: false,
+		out: 'dump.lsif',
 		repositoryRoot: '',
 		addContents: false,
 		inferTypings: false,
-		out: 'dump.lsif',
 	};
 	export const descriptions: OptionDescription[] = [
-		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'output the version number'},
-		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
-		{ id: 'repositoryRoot', type: 'string', default: '', description: 'Specifies the repository root.'},
-		{ id: 'addContents', type: 'boolean', default: false, description: 'File contents will be embedded into the dump.'},
+		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'Show help.'},
+		{ id: 'version', type: 'boolean', alias: 'v', default: false, description: 'Show application version.'},
+		{ id: 'out', type: 'string', alias: 'o', default: 'dump.lsif', description: 'The output file.'},
+		{ id: 'repositoryRoot', type: 'string', default: '', description: 'Specifies the path of the current repository (inferred automatically via git).'},
+		{ id: 'addContents', type: 'boolean', default: false, description: 'Embed file contents into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
-		{ id: 'out', type: 'string', default: 'dump.lsif', description: 'The output file the dump is save to.'},
 	];
 }
 
@@ -214,17 +214,20 @@ async function run(this: void, args: string[]): Promise<void> {
 
 	let buffer: string[] = [];
 	if (options.help) {
-		buffer.push(`Language Server Index Format tool for TypeScript`);
-		buffer.push(`Version: ${toolVersion}`);
+		buffer.push(`usage: lsif-tsc [options] [tsc options]`);
 		buffer.push('');
-		buffer.push(`Usage: lsif-tsc [options][tsc options]`);
+		buffer.push(`lsif-tsc is an LSIF indexer for TypeScript.`);
 		buffer.push('');
-		buffer.push(`Options`);
+		buffer.push(`Options:`);
 		for (let description of Options.descriptions) {
+			if (description.id == 'help') {
+				continue;
+			}
+
 			if (description.alias !== undefined) {
-				buffer.push(`  -${description.alias} --${description.id}${' '.repeat(longestId - description.id.length)} ${description.description}`);
+				buffer.push(`  -${description.alias}, --${description.id}${' '.repeat(longestId - description.id.length)}  ${description.description}`);
 			} else {
-				buffer.push(`  --${description.id}   ${' '.repeat(longestId - description.id.length)} ${description.description}`);
+				buffer.push(`      --${description.id}${' '.repeat(longestId - description.id.length)}  ${description.description}`);
 			}
 		}
 		console.log(buffer.join('\n'));
