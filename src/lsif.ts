@@ -1102,7 +1102,7 @@ abstract class SymbolDataResolver {
 
 	public getPartitionScope(sourceFiles: ts.SourceFile[]): ts.SourceFile {
 		if (sourceFiles.length === 0) {
-			throw new Error(`No soure file selection provided`);
+			throw new Error(`No source file selection provided`);
 		}
 		return sourceFiles[0];
 	}
