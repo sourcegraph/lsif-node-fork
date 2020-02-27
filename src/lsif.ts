@@ -482,9 +482,9 @@ class StandardSymbolData extends SymbolData {
 				// so that it can be referenced freely.
 				return false;
 			}
-			if (this.partitions.size !== 1) {
-				throw new Error(`Local Symbol data has more than one partition.`);
-			}
+			// if (this.partitions.size !== 1) {
+			// 	throw new Error(`Local Symbol data has more than one partition.`);
+			// }
 			this.end();
 			return true;
 		} else if (ts.isSourceFile(node)) {
