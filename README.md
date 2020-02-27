@@ -23,8 +23,6 @@ $ /path/to/lsif-node/tsc/bin/lsif-tsc --noContents -p . --stdout | /path/to/lsif
 
 In order to work correctly with LSIF dump roots on a Sourcegraph instance, you should **always** `cd` into the project root and supply `projectRoot` as the current directory (`.`). Supplying a `projectRoot` value other than the current directory will cause a mismatch in document URIs that will be unresolvable at query time.
 
-If the project provides and npm package or is depending on other npm modules the TypeScript monikers can be converted into stable npm monikers. To do so run
-
 Use `/path/to/lsif-node/tsc/bin/lsif-tsc --help` for more information.
 
 # Legal Notices
