@@ -1315,7 +1315,7 @@ class TypeAliasResolver extends StandardResolver {
 
 export interface Options {
 	projectRoot: string;
-	noContents: boolean;
+	addContents: boolean;
 }
 
 export class DataManager implements SymbolDataContext {
@@ -1524,7 +1524,7 @@ class Visitor implements ResolverContext {
 		this.typeChecker = this.program.getTypeChecker();
 		this.builder = new Builder({
 			idGenerator,
-			emitSource: !options.noContents
+			emitSource: options.addContents
 		});
 		this.symbolContainer = [];
 		this.recordDocumentSymbol = [];
