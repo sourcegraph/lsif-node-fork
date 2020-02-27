@@ -19,12 +19,14 @@ import { FileWriter } from './writer';
 import { create as createEmitter } from './emitter'
 import { ExportLinker, ImportLinker } from './linker';
 import PackageJson from './package';
+import { execSync } from 'child_process';
 
 interface Options {
 	help: boolean;
 	version: boolean;
 	package?: string;
 	projectRoot: string | undefined;
+	repositoryRoot: string | undefined;
 	addContents: boolean;
 	inferTypings: boolean;
 	out: string;
@@ -45,6 +47,7 @@ namespace Options {
 		version: false,
 		package: undefined,
 		projectRoot: undefined,
+		repositoryRoot: undefined,
 		addContents: false,
 		inferTypings: false,
 		out: 'dump.lsif',
@@ -54,6 +57,7 @@ namespace Options {
 		{ id: 'help', type: 'boolean', alias: 'h', default: false, description: 'output usage information'},
 		{ id: 'package', type: 'string', default: undefined, description: 'Specifies the location of the package.json file to use. Defaults to the package.json in the current directory.'},
 		{ id: 'projectRoot', type: 'string', default: undefined, description: 'Specifies the project root. Defaults to the current working directory.'},
+		{ id: 'repositoryRoot', type: 'string', default: undefined, description: 'Specifies the repository root.'},
 		{ id: 'addContents', type: 'boolean', default: false, description: 'File contents will be embedded into the dump.'},
 		{ id: 'inferTypings', type: 'boolean', default: false, description: 'Infer typings for JavaScript npm modules.'},
 		{ id: 'out', type: 'string', default: 'dump.lsif', description: 'The output file the dump is save to.'},
@@ -112,6 +116,11 @@ async function processProject(config: ts.ParsedCommandLine, options: Options, em
 		options.projectRoot = process.cwd();
 	}
 	options.projectRoot = tss.makeAbsolute(options.projectRoot);
+
+	if (options.repositoryRoot === undefined) {
+		options.repositoryRoot = execSync('git rev-parse --show-toplevel').toString().trimRight()
+	}
+	options.repositoryRoot = tss.makeAbsolute(options.repositoryRoot);
 
 	if (options.inferTypings) {
 		if (config.options.types !== undefined) {

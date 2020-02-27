@@ -1315,6 +1315,7 @@ class TypeAliasResolver extends StandardResolver {
 
 export interface Options {
 	projectRoot: string;
+	repositoryRoot: string;
 	addContents: boolean;
 }
 
@@ -1500,6 +1501,7 @@ class Visitor implements ResolverContext {
 	private builder: Builder;
 	private project: Project;
 	private projectRoot: string;
+	private repositoryRoot: string;
 	private rootDir: string;
 	private outDir: string;
 	private dependentOutDirs: string[];
@@ -1536,12 +1538,13 @@ class Visitor implements ResolverContext {
 			return b.length - a.length;
 		});
 		this.projectRoot = options.projectRoot;
+		this.repositoryRoot = options.repositoryRoot;
 		const toolInfo = {
 			name: 'lsif-tsc',
 			version: toolVersion,
 			args: ts.sys.args,
 		}
-		this.emit(this.vertex.metaData(Version, URI.file(this.projectRoot).toString(true), toolInfo));
+		this.emit(this.vertex.metaData(Version, URI.file(this.repositoryRoot).toString(true), toolInfo));
 		this.project = this.vertex.project();
 		const configLocation = tsConfigFile !== undefined ? path.dirname(tsConfigFile) : undefined;
 		let compilerOptions = this.program.getCompilerOptions();
