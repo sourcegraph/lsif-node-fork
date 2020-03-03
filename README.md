@@ -1,3 +1,7 @@
+# Archive
+
+This code has been de-forked into https://github.com/sourcegraph/lsif-node.
+
 # TypeScript LSIF indexer
 
 Visit https://lsif.dev/ to learn about LSIF.
